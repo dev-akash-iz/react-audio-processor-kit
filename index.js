@@ -1,2 +1,1 @@
-export { default } from './src/useAudioKitPro_Stable';
-export { default as AudioLevelIndicator } from "./src/AudioLevelIndicator"
+export { default as useAudioProcessorKit } from './src/useAudioProcessorKit';

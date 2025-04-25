@@ -2,12 +2,13 @@
   "name": "react-audio-processor",
   "version": "0.0.1",
   "description": "React hook for real-time microphone access with built-in voice activity detection (VAD), live audio data streaming, and optional recording support — ideal for voice-driven UIs and audio visualizations.",
-  "main": "./dist/index.min.js",
-"scripts": {
-    "build": "(rm -rf dist || rmdir /s /q dist || echo 'Failed to remove dist') && npm run build:min-with-additional && npm pack",
-    "build:esm": "babel src index.js --out-dir dist --copy-files",
-    "build:min": "babel src index.js --out-dir dist --minified --copy-files",
-    "build:min-with-additional": "babel src index.js --out-dir dist --minified --copy-files --out-file-extension .min.js"
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "(rm -rf dist || rmdir /s /q dist || echo 'Failed to remove dist') && webpack --mode production && npm pack",
+    "build:babel": "(rm -rf dist || rmdir /s /q dist || echo 'Failed to remove dist') && npm run build:min && npm pack",
+    "build:esm": "babel src --out-dir dist/src --copy-files && babel index.js --out-file dist/index.js",
+    "build:min": "babel . --out-dir dist --minified --copy-files",
+    "build:min-with-additional": "babel . --out-dir dist --minified --copy-files --out-file-extension .min.js"
   },
   "devDependencies": {
     "@babel/cli": "^7.26.4",
@@ -15,13 +16,15 @@
     "@babel/preset-env": "^7.26.7",
     "@babel/preset-react": "^7.24.7",
     "babel-loader": "^9.2.1",
-    "babel-minify": "^0.5.1"
+    "babel-minify": "^0.5.1",
+    "webpack": "^5.99.6",
+    "webpack-cli": "^6.0.1"
   },
   "peerDependencies": {
     "react": "^17.0.0 || ^18.0.0 || ^19.0.0",
     "react-dom": "^17.0.0 || ^18.0.0 || ^19.0.0"
   },
-    "files": [
+  "files": [
     "dist/",
     "README.md",
     "LICENSE.md",

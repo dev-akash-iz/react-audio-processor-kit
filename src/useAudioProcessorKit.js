@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { url, AUDIO_PROCESSOR_NAME, signal } from './audioProcessorV4'
+import { url, AUDIO_PROCESSOR_NAME, signal } from './audioProcessorV4.js'
 
 
 
@@ -74,7 +74,7 @@ async function init(onMessage, options) {
  * email: akashv2000.dev@gmail.com
  * last update : 25-04-2025
  */
-function useAudioKitPro(parameters = {}) {
+function useAudioProcessorKit(parameters = {}) {
     const [MicState, setMicState] = useState(Static_MicState.STOPPED);
     const initialMainAudioResources = useRef(undefined);
 
@@ -245,7 +245,7 @@ function useAudioKitPro(parameters = {}) {
     };
 }
 
-export default useAudioKitPro;
+export default useAudioProcessorKit;
 
 
 
