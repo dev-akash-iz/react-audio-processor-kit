@@ -1,1 +1,1 @@
-export { default as useAudioProcessorKit } from './src/useAudioProcessorKit';
+export { useAudioProcessorKit, MIC_STATE } from './src/useAudioKitProV6';

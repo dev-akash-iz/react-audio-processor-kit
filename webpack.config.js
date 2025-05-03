@@ -1,7 +1,7 @@
 const path = require('path');
 
 module.exports = {
-    entry: '.', // Starting point of your app or library
+    entry: './index.js', // Starting point of your app or library
     output: {
         filename: 'index.js', // The bundled file output
         path: path.resolve(__dirname, 'dist'),

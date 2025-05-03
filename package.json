@@ -58,7 +58,7 @@
     "audio-api"
   ],
   "author": "dev.akash",
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/Akash-stx/react-audio-processor/issues"
   },
