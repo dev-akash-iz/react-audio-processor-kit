@@ -27,8 +27,11 @@ const signal = {
  */
 
 
-const AudioProcessor = `
 
+
+
+
+const AudioProcessor = `
 class AudioProcessor extends AudioWorkletProcessor {
 
     constructor() {
@@ -83,6 +86,12 @@ class AudioProcessor extends AudioWorkletProcessor {
 
         this._enabledTimeIntervalVolumeVisualization = false;
 
+        /**
+         * for getGMS function variables
+         */
+        this.browserDefaultAudioBufferLength = 0;
+        this.precalculatedLengthFastDivision = 0;
+        this.getRMS = this._getRMSSwicher;
 
         /**
          *  Communicate with main thread
@@ -365,7 +374,7 @@ class AudioProcessor extends AudioWorkletProcessor {
      * @returns INTEGER
      */
     float32ToInt16(float32Array) {
-        const len=float32Array.length;
+        const len = float32Array.length;
         const int16Array = new Int16Array(len);
         for (let i = 0; i < len; i++) {
             let s = Math.max(-1, Math.min(1, float32Array[i]));
@@ -385,7 +394,7 @@ class AudioProcessor extends AudioWorkletProcessor {
      * @param {*} buffer
      * @returns float
      */
-    getRMS(buffer) {
+    _getRMS_for_optimal(buffer) {
         let sumSquares = 0;
         const len = buffer.length;
         /**
@@ -410,6 +419,54 @@ class AudioProcessor extends AudioWorkletProcessor {
          *  1/128 gives 0.0078125 simply just multiply by it you get its value
          */
         return Math.sqrt(sumSquares / len);
+    }
+
+    /**
+     * get silent and peak from value under 0 to 1
+     *
+     * v3 - new changes
+     * In this version i simply only checking half value
+     * it is ok till we get positive result same reslt not major accurasy issue
+     * and get performance bost
+     *
+     * @param {*} buffer
+     * @returns float
+     */
+    _getRMS_for_performance(buffer) {
+        let sumSquares = 0;
+        const len = this.browserDefaultAudioBufferLength;
+        /**
+         * idea is to get a single value from 0 to 1 from all 128 values from this list;
+         * mathematically just 20/100 gives 0.2 like that adding each  give 128 value and total is 128.
+         * which is 128/128 gives 1
+         *
+         * this is base idea other than it all normallization of each single 128 value
+         * like if value is minus making is positive ,  any way it will not exede 1 so allways
+         * its total lesst than or equal to 128 why becaous is each maxmimum is 1 then 1*128 gives 128
+         *
+         * finally sqaure rooting to get lowest round value we are doing this
+         * without it also we can work in this
+         *
+         */
+        for (let i = 0; i < len; i++) {
+            sumSquares += buffer[i] * buffer[i];
+        }
+        /**
+         *  here constent 0.0078125 equivalent of 128  basically iam doing division in fastest way
+         *  multiplicational divition is faster than actual division in cpu
+         *  1/128 gives 0.0078125 simply just multiply by it you get its value
+         */
+        return Math.sqrt(sumSquares * this.precalculatedLengthFastDivision);
+    }
+
+    _getRMSSwicher(buffer) {
+        if (buffer.length > 0) {
+            this.browserDefaultAudioBufferLength = buffer.length;
+            this.precalculatedLengthFastDivision = 1 / buffer.length;
+            this.getRMS = this._getRMS_for_performance;
+            return this._getRMS_for_performance(buffer);
+        }
+        return this._getRMS_for_optimal(buffer);
     }
 
     /**
@@ -443,7 +500,7 @@ class AudioProcessor extends AudioWorkletProcessor {
      * here 3ms i choosen for one frame so i precalculated fast division way by multiplying 1/3 to
      */
     msToFrame(totalMs = 0) {
-        return 0.5 + (totalMs * 0.3333333333333333) | 0;
+        return 0.5 + (totalMs * 0.3333333333333333) | 0; //=> equialient to 1000ms/3ms
     }
 
 
@@ -461,4 +518,3 @@ const url = URL.createObjectURL(blob);
 
 
 export { url, signal };
-
