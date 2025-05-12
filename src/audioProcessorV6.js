@@ -27,10 +27,6 @@ const signal = {
  */
 
 
-
-
-
-
 const AudioProcessor = `
 class AudioProcessor extends AudioWorkletProcessor {
 
@@ -38,8 +34,10 @@ class AudioProcessor extends AudioWorkletProcessor {
         super();
         console.log("Hello :) from AudioProcessor V6");
         this._readyTolisten = false;
+        this._userSettings;
         this._needToSaveAudio = false;
         this._enableVad = false;
+        this._eachProcessCallTime = 0.3333333333333333; //3ms by default , it can auto adjust based on sample rate and buffersize
 
         /**
          * WebAudio calls process() every time, we can't replace it.
@@ -48,7 +46,7 @@ class AudioProcessor extends AudioWorkletProcessor {
          * This way we avoid if checks and get better performance.
          */
         this._runtimeProcess = () => true; // default dummy function
-
+        this._runtimeSwitcher = this._runtimeSwitcherHelper;
         /**
          * variables for vad feature
          */
@@ -58,6 +56,7 @@ class AudioProcessor extends AudioWorkletProcessor {
         this._silentMaxFrame = 70; // 70 FRAME OF EACH 3MS TO 60*3 GIVES '180MS' OF SILENT MEANS TRIGGERS
         this._facedAnyPeakVolume = false; // a variable which allow to vad to save if meet peak condtion
         this._noiseFloor = 0.004;
+
         /**
          * variables for need to save audio to record total session from start to stop
          */
@@ -75,7 +74,7 @@ class AudioProcessor extends AudioWorkletProcessor {
          * for Volume level of audio needed for virtualization and others
          * this rms volume data is update to main thread per the given frame
          */
-        this._VolumeUpdateframe = 5; //15MS to get 60 frame rate like smooth
+        this._VolumeUpdateframe = this.msToFrame(16); // 16 MS to get 60 frame rate like smooth
         this._currentVolumeFrame = 0;
 
         /***
@@ -91,7 +90,6 @@ class AudioProcessor extends AudioWorkletProcessor {
          */
         this.browserDefaultAudioBufferLength = 0;
         this.precalculatedLengthFastDivision = 0;
-        this.getRMS = this._getRMSSwicher;
 
         /**
          *  Communicate with main thread
@@ -137,27 +135,43 @@ class AudioProcessor extends AudioWorkletProcessor {
 
     _initialAssign(params) {
         this.signal = params.signal;
-        this._updateSettings(params);
+        this._oneTimeOptions(params);
+        this._runtimeOptions(params);
+        this._chooseProcess();
         this._readyTolisten = true;
     }
 
-    _updateSettings(params) {
+    _oneTimeOptions(params) {
+        this._userSettings = params;
         this._enableVad = !!params?.vad?.enabled; //default False
         this._needToSaveAudio = !!params?.recording?.enabled; //default False
+    }
+
+    _runtimeOptions(params) {
+        /**
+         * time based settings
+         */
+        this._enabledTimeIntervalVolumeVisualization = params?.timing?.volumeVisualization;
+        /**
+         * vad based settings
+         */
+        this._noiseFloor = params?.vad?.noiseFloor;
+
+        this._updateTimeBased(params);
+    }
+
+    _updateTimeBased(params) {
         /**
          * time based settings
          * all in Millisecond
          */
         this.maxTimeTriggerSecondsInFrame = this.msToFrame(params?.timing?.interval || 1000) //default timeSlice is 1000 ms
-        this._enabledTimeIntervalVolumeVisualization = params?.timing?.volumeVisualization;
         /**
-         * vad based settings
-         * all in Millisecond
-         */
+        * vad based settings
+        * all in Millisecond
+        */
         this._peakMaxFrame = this.msToFrame(params?.vad?.speakDetectionDelayMs || 90); // default max time confirm by system that user is started speaking
         this._silentMaxFrame = this.msToFrame(params?.vad?.silenceDetectionDelayMs || 210); // default max time confirm by system that user is stopped speaking
-        this._noiseFloor = params?.vad?.noiseFloor || 0.004;
-        this._chooseProcess();
     }
 
     /**
@@ -180,8 +194,25 @@ class AudioProcessor extends AudioWorkletProcessor {
     process(inputs, outputs, parameters) { //  at run time we can change inner funtion , this is dynamically changged
         if (!this._readyTolisten) return true;
 
-        return this._runtimeProcess(inputs, outputs, parameters);
+        return this._runtimeSwitcher(inputs, outputs, parameters);
     }
+
+    _runtimeSwitcherHelper(inputs, outputs, parameters) {
+        const len = inputs?.[0]?.[0]?.length;
+        if (len > 0) {
+            this._calculateTimePerCall(len);
+            this.browserDefaultAudioBufferLength = len;
+            this.precalculatedLengthFastDivision = 1 / len;
+            /**
+             * changing to _runtimeProcess so next time it will direcly call the main methods
+             */
+            this._runtimeSwitcher = this._runtimeProcess;
+            this._updateTimeBased(this._userSettings);
+            return this._runtimeProcess(inputs, outputs, parameters);
+        }
+        return true;
+    }
+
 
     Process_TiME_BASED_Without_vad_and_FullRecording(inputs, outputs, parameters) {
 
@@ -394,45 +425,7 @@ class AudioProcessor extends AudioWorkletProcessor {
      * @param {*} buffer
      * @returns float
      */
-    _getRMS_for_optimal(buffer) {
-        let sumSquares = 0;
-        const len = buffer.length;
-        /**
-         * idea is to get a single value from 0 to 1 from all 128 values from this list;
-         * mathematically just 20/100 gives 0.2 like that adding each  give 128 value and total is 128.
-         * which is 128/128 gives 1
-         *
-         * this is base idea other than it all normallization of each single 128 value
-         * like if value is minus making is positive ,  any way it will not exede 1 so allways
-         * its total lesst than or equal to 128 why becaous is each maxmimum is 1 then 1*128 gives 128
-         *
-         * finally sqaure rooting to get lowest round value we are doing this
-         * without it also we can work in this
-         *
-         */
-        for (let i = 0; i < len; i++) {
-            sumSquares += buffer[i] * buffer[i];
-        }
-        /**
-         *  here constent 0.0078125 equivalent of 128  basically iam doing division in fastest way
-         *  multiplicational divition is faster than actual division in cpu
-         *  1/128 gives 0.0078125 simply just multiply by it you get its value
-         */
-        return Math.sqrt(sumSquares / len);
-    }
-
-    /**
-     * get silent and peak from value under 0 to 1
-     *
-     * v3 - new changes
-     * In this version i simply only checking half value
-     * it is ok till we get positive result same reslt not major accurasy issue
-     * and get performance bost
-     *
-     * @param {*} buffer
-     * @returns float
-     */
-    _getRMS_for_performance(buffer) {
+    _getRMS(buffer) {
         let sumSquares = 0;
         const len = this.browserDefaultAudioBufferLength;
         /**
@@ -459,16 +452,6 @@ class AudioProcessor extends AudioWorkletProcessor {
         return Math.sqrt(sumSquares * this.precalculatedLengthFastDivision);
     }
 
-    _getRMSSwicher(buffer) {
-        if (buffer.length > 0) {
-            this.browserDefaultAudioBufferLength = buffer.length;
-            this.precalculatedLengthFastDivision = 1 / buffer.length;
-            this.getRMS = this._getRMS_for_performance;
-            return this._getRMS_for_performance(buffer);
-        }
-        return this._getRMS_for_optimal(buffer);
-    }
-
     /**
      * analyse for silence in audio bit
      * with our given constant value
@@ -476,11 +459,8 @@ class AudioProcessor extends AudioWorkletProcessor {
      * @returns boolean
      */
     isSilent(buffer) {
-        const rms = this.getRMS(buffer);
-        // this.port.postMessage({
-        //     status: 15,
-        //     volume: rms,
-        // });
+        const rms = this._getRMS(buffer);
+
         if (this._currentVolumeFrame > this._VolumeUpdateframe) {
             this._currentVolumeFrame = 0;
             this.port.postMessage({
@@ -494,13 +474,20 @@ class AudioProcessor extends AudioWorkletProcessor {
         return rms < this._noiseFloor;
     }
 
+
     /**
-     *
-     * a function to convert millisecond to frame
-     * here 3ms i choosen for one frame so i precalculated fast division way by multiplying 1/3 to
-     */
+    * Converts milliseconds to frame count based on an assumed 3ms per frame.
+    */
     msToFrame(totalMs = 0) {
-        return 0.5 + (totalMs * 0.3333333333333333) | 0; //=> equialient to 1000ms/3ms
+        return (totalMs * this._eachProcessCallTime) | 0;
+    }
+
+
+    _calculateTimePerCall(samplesArraySizePerCall) {
+        //(128 /44000) *1000 gives approx 2.66ms and we can increase or decrease based on value
+        const timePerCallInMilliseconds = (samplesArraySizePerCall / this._userSettings.actualSampleRate) * 1000; // how many possible call need to cover the whole samplerate with gives bytes array length
+        this._eachProcessCallTime = 1 / timePerCallInMilliseconds; //  this is converting diviso number to division in a multiplication way
+        this._VolumeUpdateframe = this.msToFrame(16);
     }
 
 

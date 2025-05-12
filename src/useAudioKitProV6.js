@@ -65,7 +65,7 @@ export const MIC_STATE = {
 };
 
 
-const MIC_STATE_CHAR = {
+export const MIC_STATE_CHAR = {
     [signal.STOP]: "S",
     [signal.START]: "R",
     [signal.PAUSE]: "P"
@@ -79,12 +79,7 @@ async function init(onMessage, unFilteredKey, initialMainAudioResources) {
         if (!instanceReady) throw new Error("Failed to initialize audioContext");
         audioContextInstance = instanceReady[0];
         const workletNodeThread = instanceReady[1];
-        const stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-                sampleRate: initialSettings.sampleRate,
-                channelCount: 1
-            }
-        });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         //const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
 
         const source = audioContextInstance.createMediaStreamSource(stream);
@@ -95,9 +90,9 @@ async function init(onMessage, unFilteredKey, initialMainAudioResources) {
          *  passing initial of settings to audio thread
          *  mainly passing signal object refrence one time at start
          */
-        initialSettings["signal"] = signal;
-        initialSettings["status"] = signal.INIT;
-
+        initialSettings.signal = signal;
+        initialSettings.status = signal.INIT;
+        initialSettings.actualSampleRate = audioContextInstance.sampleRate;
 
         workletNodeThread.port.postMessage(initialSettings);
 
@@ -416,7 +411,7 @@ function filterKey(unCleanObject) {
             enabled: !!vad.enabled,
             speakDetectionDelayMs: vad.speakDetectionDelayMs || 30,
             silenceDetectionDelayMs: vad.silenceDetectionDelayMs || 50,
-            noiseFloor: vad.noiseFloor || 0.008,
+            noiseFloor: irregularlinearClamp(vad.noiseFloor) || 0.008,
         };
     }
 
@@ -444,4 +439,14 @@ function filterKey(unCleanObject) {
     }
 
     return result;
+}
+
+
+// it try to give a linear value from  1 to 100 percentage and give a value between 0.004 to 0.800
+//so here i convert each value to its representation in 1000 so i multiply each value to 10 bec, 10*100 times gives 1000
+//after 0.2 it is not praticall from my testting
+function irregularlinearClamp(percent) {
+    if (!percent) return null;
+    const clamped = Math.min(Math.max(1, percent), 100);
+    return clamped > 50 ? clamped * 2 / 1000 : clamped / 1000;
 }
