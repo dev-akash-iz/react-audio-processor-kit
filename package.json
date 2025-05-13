@@ -1,8 +1,8 @@
 {
   "name": "react-audio-processor-kit",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "A lightweight React hook for real-time voice activity detection (VAD), low-latency audio streaming, volume visualization, and optional full-session recording — built for voice-enabled interfaces and live audio applications.", 
-  "main": "./dist/index.js",
+  "main": "./dist/index.js", 
   "scripts": {
     "build": "(rm -rf dist || rmdir /s /q dist || echo 'Failed to remove dist') && webpack --mode production && npm pack",
     "build:babel": "(rm -rf dist || rmdir /s /q dist || echo 'Failed to remove dist') && npm run build:min && npm pack",
@@ -25,7 +25,7 @@
     "react-dom": "^17.0.0 || ^18.0.0 || ^19.0.0"
   },
   "files": [
-    "dist/",
+    "dist",
     "README.md",
     "LICENSE.md",
     "CHANGELOG.md"
@@ -34,29 +34,29 @@
     "type": "git",
     "url": "git+https://github.com/dev-akash-iz/react-audio-processor-kit.git"
   },
-  "keywords": [
-    "react",
-    "audio",
-    "microphone",
-    "vad",
-    "voice-detection",
-    "voice-activity-detection",
-    "real-time-audio",
-    "audio-streaming",
-    "audio-recorder",
-    "react-hook",
-    "web-audio",
-    "audio-processing",
-    "react-audio",
-    "speech-detection",
-    "voice-ui",
-    "browser-audio",
-    "react-microphone",
-    "live-audio",
-    "audio-visualization",
-    "audio-capture",
-    "audio-api"
-  ],
+  "keywords":  [
+  "react",
+  "audio",
+  "microphone",
+  "vad",
+  "voice-detection",
+  "voice-activity-detection",
+  "real-time-audio",
+  "audio-streaming",
+  "audio-recorder",
+  "react-hook",
+  "web-audio",
+  "audio-processing",
+  "react-audio",
+  "speech-detection",
+  "voice-ui",
+  "browser-audio",
+  "live-audio",
+  "visualization",
+  "react-visualization",
+  "audio-capture",
+  "audio-api"
+],
   "author": "dev.akash",
   "license": "MIT",
   "bugs": {

@@ -26,7 +26,7 @@ A high-performance audio processor built on the Web Audio API and `AudioWorklet`
 
 ---
 
-**🌐 View live demo:** [https://your-website-url.com](https://your-website-url.com)
+**🌐 View live demo:** [https://react-audio-processor-kit.netlify.app/](https://react-audio-processor-kit.netlify.app/)
 
 
 ## 📦 Installation
