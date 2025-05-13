@@ -1,4 +1,4 @@
-# 🎧 Audio Processor Worklet
+# 🎧 react-audio-processor-kit
 
 A high-performance audio processor built on the Web Audio API and `AudioWorklet` — optimized for real-time audio chunking, voice activity detection (VAD), and browser-based recording.
 
@@ -14,6 +14,7 @@ A high-performance audio processor built on the Web Audio API and `AudioWorklet`
 - 🚀 Minimal branching inside `process()` for high performance
 - 🧩 Built-in session recording and time-based chunked capture
 - 🌐 Designed for modern browsers and streaming use cases
+- 🔊 Audio Virtualization — Provide real-time audio volume visualization values, enabling the creation of dynamic virtual audio feedback in the UI (e.g., volume meters or audio visualizations)
 
 ---
 
@@ -25,10 +26,13 @@ A high-performance audio processor built on the Web Audio API and `AudioWorklet`
 
 ---
 
+**🌐 View live demo:** [https://your-website-url.com](https://your-website-url.com)
+
+
 ## 📦 Installation
 
 ```bash
-npm install react-audio-processor
+npm install react-audio-processor-kit
 ```
 
 ---
@@ -36,38 +40,39 @@ npm install react-audio-processor
 ## ⚙️ Quick Start
 
 ```js
-import { useAudioProcessorKit } from 'react-audio-processor';
-
 const {
+  micState,
   Start,
   Pause,
   Resume,
   Stop,
   Subscribe,
-  unSubscribe,
+  unSubscribe
 } = useAudioProcessorKit({
   vad: {
-    enabled: true,
-    speakDetectionDelayMs: 30,
-    silenceDetectionDelayMs: 50,
+    enabled: false,
+    speakDetectionDelayMs: 60,
+    silenceDetectionDelayMs: 310,
+    noiseFloor: 20,
+  },
+  timing: {
+    interval: 1000,
+    volumeVisualization: true,
   },
   recording: {
     enabled: true,
     onComplete: (blob) => {
-      console.log('Full recording:', blob);
+      console.log(blob);
+      // setFullRecord(URL.createObjectURL(blob));
     },
-  },
-  timing: {
-    interval: 1000, // 1 second
-    volumeVisualization: true,
   },
   data: {
     onAvailable: (blob) => {
-      console.log('Sending audio data:', blob);
+      setAudioBlobs(prev => [...prev, URL.createObjectURL(blob)]);
     },
   },
   audio: {
-    wav: true,
+    wav: false, // pcm Or wav , by default wav is provided
     sampleRate: 16000,
   },
 });
@@ -75,116 +80,163 @@ const {
 
 ---
 
-## 🧩 Hook API: `useAudioProcessorKit(config)`
-
-### 🔘 Control Methods
-
-| Method          | Description                                               |
-|-----------------|-----------------------------------------------------------|
-| `Start()`       | Starts the microphone and begins audio processing         |
-| `Pause()`       | Temporarily halts processing (microphone remains active)  |
-| `Resume()`      | Resumes processing after `Pause()`                        |
-| `Stop()`        | Stops everything and triggers `onComplete()` if enabled   |
-| `Subscribe()`   | Begins receiving audio chunks                             |
-| `unSubscribe()` | Stops receiving audio chunks                              |
-
----
-
-### ⚙️ Configuration Options
-
-#### 🧠 `vad`
-
-| Option                    | Type      | Default | Description                            |
-|---------------------------|-----------|---------|----------------------------------------|
-| `enabled`                 | `boolean` | `true`  | Enable Voice Activity Detection         |
-| `speakDetectionDelayMs`   | `number`  | `30`    | Delay before confirming speech started |
-| `silenceDetectionDelayMs` | `number`  | `50`    | Delay before confirming silence        |
-
-#### 🕒 `timing`
-
-| Option                | Type      | Default | Description                          |
-|-----------------------|-----------|---------|--------------------------------------|
-| `interval`            | `number`  | `1000`  | Time interval (ms) for audio chunks  |
-| `volumeVisualization` | `boolean` | `false` | Enable live volume tracking          |
-
-#### 💾 `recording`
-
-| Option             | Type       | Default | Description                                 |
-|--------------------|------------|---------|---------------------------------------------|
-| `enabled`          | `boolean`  | `false` | Enable session-level recording              |
-| `onComplete(blob)` | `function` | —       | Called on `Stop()` with final recorded Blob |
-
-#### 📤 `data`
-
-| Option              | Type       | Description                                                |
-|---------------------|------------|------------------------------------------------------------|
-| `onAvailable(blob)` | `function` | Called every `interval` ms or on VAD trigger with a Blob   |
-
-#### 🎧 `audio`
-
-| Option       | Type      | Default | Description                     |
-|--------------|-----------|---------|---------------------------------|
-| `wav`        | `boolean` | `true`  | Encode audio as WAV (else PCM) |
-| `sampleRate` | `number`  | `16000` | Target sample rate in Hz       |
-
----
-
-## 🧪 Example UI Integration
+## 🎛 Microphone Controls UI
 
 ```jsx
-function AudioControls() {
-  const {
-    Start,
-    Stop,
-    Pause,
-    Resume,
-    volume,
-  } = useAudioProcessorKit({ /* config here */ });
+<div>
+  <button onClick={Start} disabled={micState !== "S"}>Start</button>
+  <button onClick={Pause} disabled={micState !== "R"}>Pause</button>
+  <button onClick={Resume} disabled={micState !== "P"}>Resume</button>
+  <button onClick={Stop} disabled={micState === "S"}>Stop</button>
+</div>
+```
 
-  return (
-    <div>
-      <button onClick={Start}>🎙️ Start</button>
-      <button onClick={Pause}>⏸ Pause</button>
-      <button onClick={Resume}>▶️ Resume</button>
-      <button onClick={Stop}>⏹ Stop</button>
+* `"S"` = Stopped
+* `"R"` = Recording
+* `"P"` = Paused
 
-      <div>🔊 Volume: {volume.toFixed(3)}</div>
-    </div>
-  );
+---
+
+## ⚙️ Configuration Reference
+
+### 🧠 `vad`
+
+Voice Activity Detection
+
+| Property                  | Type      | Description                                            |
+| ------------------------- | --------- | ------------------------------------------------------ |
+| `enabled`                 | `boolean` | Enables or disables VAD                                |
+| `speakDetectionDelayMs`   | `number`  | Delay before confirming speaking has started           |
+| `silenceDetectionDelayMs` | `number`  | Delay before confirming silence                        |
+| `noiseFloor`              | `number`  | Sensitivity threshold (1–100). Lower is more sensitive |
+
+```js
+vad: {
+  enabled: true,
+  speakDetectionDelayMs: 30,
+  silenceDetectionDelayMs: 50,
+  noiseFloor: 4,
 }
 ```
 
 ---
 
-## 📁 Output
+### 💾 `recording`
 
-- `onAvailable(blob)` — returns a `Blob` per interval or VAD event
-- `onComplete(blob)` — returns full session audio on `Stop()`
+Record the entire audio session.
+
+| Property           | Type       | Description                              |
+| ------------------ | ---------- | ---------------------------------------- |
+| `enabled`          | `boolean`  | Enables recording                        |
+| `onComplete(blob)` | `function` | Called on `Stop()` with final audio blob |
 
 ```js
-onAvailable(blob); // Example: every 1s or on speech
-onComplete(blob);  // Final WAV/PCM blob for entire session
+recording: {
+  enabled: true,
+  onComplete: (blob) => {
+    setFullRecord(URL.createObjectURL(blob));
+  },
+}
 ```
 
 ---
 
-## 🌐 Browser Support
+### 🕒 `timing`
 
-| Browser         | Support     |
-|-----------------|-------------|
-| Chrome 66+      | ✅ Likely supported (not fully tested) |
-| Firefox 76+     | ✅ Likely supported (not fully tested) |
-| Edge (Chromium) | ✅ Likely supported (not fully tested) |
-| Safari 14.1+    | ✅ Likely supported (not fully tested) |
-| iOS Safari      | ✅ Likely supported (not fully tested) |
+Time-based audio capture
 
-> **Note:** Microphone access requires HTTPS or `localhost`.
+| Property              | Type      | Description                         |
+| --------------------- | --------- | ----------------------------------- |
+| `interval`            | `number`  | Time interval in ms between chunks  |
+| `volumeVisualization` | `boolean` | Enables real-time volume data (RMS) |
+
+```js
+timing: {
+  interval: 1000,
+  volumeVisualization: true,
+}
+```
+
+---
+
+### 📤 `data`
+
+Handle real-time audio chunks
+
+| Property            | Type       | Description                                           |
+| ------------------- | ---------- | ----------------------------------------------------- |
+| `onAvailable(blob)` | `function` | Called when an audio chunk is ready (VAD or interval) |
+
+```js
+data: {
+  onAvailable: (blob) => {
+    setAudioBlobs(prev => [...prev, URL.createObjectURL(blob)]);
+  },
+}
+```
+
+---
+
+### 🎧 `audio`
+
+Audio format configuration
+
+| Property     | Type      | Description                |
+| ------------ | --------- | -------------------------- |
+| `sampleRate` | `number`  | Target sample rate (Hz)    |
+| `wav`        | `boolean` | Output format (WAV or PCM) |
+
+```js
+audio: {
+  sampleRate: 16000,
+  wav: true,
+}
+```
+
+---
+
+## 🔘 Control API
+
+| Method                | Description                      |
+| --------------------- | -------------------------------- |
+| `Start()`             | Starts the audio pipeline        |
+| `Pause()`             | Temporarily halts processing     |
+| `Resume()`            | Resumes processing               |
+| `Stop()`              | Finalizes and stops everything   |
+| `Subscribe(callback)` | Subscribe to audio events        |
+| `unSubscribe(index)`  | Unsubscribe using returned index |
+
+---
+
+### 📡 Subscribe Example
+
+```js
+useEffect(() => {
+  const index = Subscribe((data) => {
+    setSpeaking(data.isSpeaking);
+  });
+
+  return () => unSubscribe(index);
+}, []);
+```
+
+---
+
+## 🧪 Output
+
+* `onAvailable(blob)` — Called every time interval or per VAD event
+* `onComplete(blob)` — Final session recording blob on Stop
+
+---
+
+
+> Requires HTTPS or `localhost` for microphone access.
 
 ---
 
 ## 👨‍💻 Author
 
-**Akash V**  
+**dev.akash**
 📧 [akashv2000.dev@gmail.com](mailto:akashv2000.dev@gmail.com)
 
 ---
