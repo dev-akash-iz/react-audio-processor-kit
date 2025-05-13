@@ -1,6 +1,6 @@
 {
-  "name": "react-audio-processor",
-  "version": "0.0.1",
+  "name": "react-audio-processor-kit",
+  "version": "0.0.0",
   "description": "React hook for real-time microphone access with built-in voice activity detection (VAD), live audio data streaming, and optional recording support — ideal for voice-driven UIs and audio visualizations.",
   "main": "./dist/index.js",
   "scripts": {
@@ -32,7 +32,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Akash-stx/react-audio-processor.git"
+    "url": "git+https://github.com/dev-akash-iz/react-audio-processor-kit.git"
   },
   "keywords": [
     "react",
@@ -60,7 +60,7 @@
   "author": "dev.akash",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/Akash-stx/react-audio-processor/issues"
+    "url": "https://github.com/dev-akash-iz/react-audio-processor-kit/issues"
   },
-  "homepage": "https://github.com/Akash-stx/react-audio-processor#readme"
+  "homepage": "https://github.com/dev-akash-iz/react-audio-processor-kit.git#readme"
 }
