@@ -12,37 +12,47 @@ function isFun(funRefrence) {
 
 //------------------------------------------------CONSTANTS end here -----------------------------------------------
 
+
 /**
- * !NOTE!
+ * useAudioProcessorKit.js
  * 
- * AUDIOCONTEXT WITH AUDIOPROCESSOR - Initalization
- * very important
- * idea is to create single audioContext with audioProcessor otherwise it may be heavy
+ * Author: Akash V
+ * Contact: akashv2000.dev@gmail.com
  */
 
 let audioContextCache;
 let sampleRateCache;
 let workletNodeThreadCache;
+let highpassFilterCache;
+let lowpassFilterCache;
 
 async function getAudioContextInstance(sampleRate = 16000) {
 
     try {
         if (isAudioContextActive(audioContextCache) && (sampleRateCache === sampleRate)) {
-            console.log("used cache");
-            return [audioContextCache, workletNodeThreadCache];
+            return [audioContextCache, workletNodeThreadCache, highpassFilterCache, lowpassFilterCache];
         } else {
             audioContextCache = new (window?.AudioContext || window?.webkitAudioContext)({ sampleRate });
             sampleRateCache = sampleRate;
-            console.log("Actual sample rate:", audioContextCache.sampleRate);
             const promiseOfAddModuleWorklet = audioContextCache?.audioWorklet?.addModule?.(url);
             promiseOfAddModuleWorklet?.catch?.((e) => {
-                console.log("not able add addModule VocalProcessor.js may be browser not supporting")
+                console.log("Issue on adding audioWorklet module")
             });
             await promiseOfAddModuleWorklet;
             workletNodeThreadCache = new AudioWorkletNode(audioContextCache, AUDIO_PROCESSOR_NAME);
-            console.log("one time initalization");
-            console.log("created new");
-            return [audioContextCache, workletNodeThreadCache];
+
+            // Noise filters (a little DSP and a little hope): remove low-frequency thumps and high-frequency hiss
+            highpassFilterCache = audioContextCache.createBiquadFilter();
+            highpassFilterCache.type = "highpass";
+            highpassFilterCache.frequency.value = 120; // Cuts low frequency below 120
+            highpassFilterCache.Q.value = 0.7;
+
+            lowpassFilterCache = audioContextCache.createBiquadFilter();
+            lowpassFilterCache.type = 'lowpass';
+            lowpassFilterCache.frequency.value = 3500;
+            lowpassFilterCache.Q.value = 0.7;
+
+            return [audioContextCache, workletNodeThreadCache, highpassFilterCache, lowpassFilterCache];
         }
     } catch (error) {
         audioContextCache = undefined;
@@ -73,55 +83,46 @@ export const MIC_STATE_CHAR = {
 
 async function init(onMessage, unFilteredKey, initialMainAudioResources) {
     const initialSettings = filterKey(unFilteredKey);
-    let audioContextInstance;
-    try {
-        const instanceReady = await getAudioContextInstance(initialSettings.sampleRate);
-        if (!instanceReady) throw new Error("Failed to initialize audioContext");
-        audioContextInstance = instanceReady[0];
-        const workletNodeThread = instanceReady[1];
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        //const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+    const instanceReady = await getAudioContextInstance(initialSettings.sampleRate);
+    if (!instanceReady) throw new Error("Failed to initialize audioContext");
+    const audioContextInstance = instanceReady[0];
+    const workletNodeThread = instanceReady[1];
+    const highpass = instanceReady[2];
+    const lowpass = instanceReady[3];
+    const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true
+    });
+    const source = audioContextInstance.createMediaStreamSource(stream);
+    //=== attaching call back of main thread  so from audioworklet thread can call this callbacks ====
+    workletNodeThread.port.onmessage = onMessage;
 
-        const source = audioContextInstance.createMediaStreamSource(stream);
-        //=== attaching call back of main thread  so from audioworklet thread can call this callbacks ====
-        workletNodeThread.port.onmessage = onMessage;
+    /**
+     *  passing initial of settings to audio thread
+     *  mainly passing signal object refrence one time at start
+     */
+    initialSettings.signal = signal;
+    initialSettings.status = signal.INIT;
+    initialSettings.actualSampleRate = audioContextInstance.sampleRate;
 
-        /**
-         *  passing initial of settings to audio thread
-         *  mainly passing signal object refrence one time at start
-         */
-        initialSettings.signal = signal;
-        initialSettings.status = signal.INIT;
-        initialSettings.actualSampleRate = audioContextInstance.sampleRate;
+    workletNodeThread.port.postMessage(initialSettings);
 
-        workletNodeThread.port.postMessage(initialSettings);
+    // Connect filters to worklet
+    source
+        .connect(highpass)
+        .connect(lowpass)
+        .connect(workletNodeThread);
 
-        source.connect(workletNodeThread);
-
-        initialMainAudioResources.current['STREAM'] = stream;
-        initialMainAudioResources.current['SOURCE'] = source;
-        initialMainAudioResources.current['WORKLETHREAD'] = workletNodeThread;
-        initialMainAudioResources.current['AUDIOCONTEXT'] = audioContextInstance;
-        initialMainAudioResources.current['POSTMESSAGE'] = workletNodeThread.port.postMessage;
-        await audioContextInstance.resume();
-        return true;
-
-    } catch (e) {
-        initialMainAudioResources.current['WORKLETHREAD'] = null;
-        console.error("Error during audio initialization:", e);
-        await audioContextInstance.suspend();
-        return false;
-    }
+    initialMainAudioResources.current['STREAM'] = stream;
+    initialMainAudioResources.current['SOURCE'] = source;
+    initialMainAudioResources.current['WORKLETHREAD'] = workletNodeThread;
+    initialMainAudioResources.current['AUDIOCONTEXT'] = audioContextInstance;
+    initialMainAudioResources.current['POSTMESSAGE'] = workletNodeThread.port.postMessage;
+    await audioContextInstance.resume();
+    return true;
 }
 
 
-/**
- * @author Akash V
- * @contact akashv2000.dev@gmail.com
- * @lastUpdated 03-05-2025
- * 
- * A custom hook for managing audio processing in React.
- */
+
 function useAudioProcessorKit(settings = {}) {
     const [micState, setMicState] = useState(MIC_STATE_CHAR[MIC_STATE.STOPPED]);
     const initialMainAudioResources = useRef({});
@@ -294,10 +295,11 @@ function useAudioProcessorKit(settings = {}) {
                 postMessage({ status: signal.START });
                 changeStatus(signal.START);
             }
-            return true;
+            return { status: true };
         } catch (err) {
-            console.error("Microphone permission denied or error:", err);
-            return false;
+            //gracefully closing if error happens after mic permission success , becasue it will lisnern mic
+            close();
+            throw Error({ status: false, error: err });
         }
     };
 
@@ -350,7 +352,7 @@ export { useAudioProcessorKit };
 
 // direct convert int16bit to blob pcm / system that read need to be read with 2 byte to get proper data
 function encodePCM16ToBlob(int16ArrayChunks) {
-    return new Blob([int16ArrayChunks.buffer], { type: 'audio/pcm' });
+    return new Blob([int16ArrayChunks], { type: 'audio/pcm' });
 }
 
 
@@ -441,12 +443,13 @@ function filterKey(unCleanObject) {
     return result;
 }
 
-
-// it try to give a linear value from  1 to 100 percentage and give a value between 0.004 to 0.800
-//so here i convert each value to its representation in 1000 so i multiply each value to 10 bec, 10*100 times gives 1000
-//after 0.2 it is not praticall from my testting
+/**
+ * This function maps a percentage value (1 to 100) to a range between 0.004 and 0.800, 
+ * applying an irregular linear transformation.
+ * The scaling becomes more gradual after 90%, ensuring smoother transitions at higher values.
+ */
 function irregularlinearClamp(percent) {
     if (!percent) return null;
     const clamped = Math.min(Math.max(1, percent), 100);
-    return clamped > 50 ? clamped * 2 / 1000 : clamped / 1000;
+    return clamped > 90 ? clamped * 2 / 1000 : clamped / 1000;
 }

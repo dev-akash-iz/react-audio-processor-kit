@@ -1,1 +1,1 @@
-export { useAudioProcessorKit, MIC_STATE } from './src/useAudioKitProV6';
+export { useAudioProcessorKit, MIC_STATE } from './src/useAudioProcessorKit';

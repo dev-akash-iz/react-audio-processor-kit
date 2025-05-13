@@ -1,7 +1,7 @@
 {
   "name": "react-audio-processor-kit",
   "version": "0.0.0",
-  "description": "React hook for real-time microphone access with built-in voice activity detection (VAD), live audio data streaming, and optional recording support — ideal for voice-driven UIs and audio visualizations.",
+  "description": "A lightweight React hook for real-time voice activity detection (VAD), low-latency audio streaming, volume visualization, and optional full-session recording — built for voice-enabled interfaces and live audio applications.", 
   "main": "./dist/index.js",
   "scripts": {
     "build": "(rm -rf dist || rmdir /s /q dist || echo 'Failed to remove dist') && webpack --mode production && npm pack",

@@ -12,22 +12,24 @@ const signal = {
     ON_COMPLETE_FULL_RECORDING_TRIGGER: 13,
 }
 
-// ! important currenly 128 is contantly given in each channelData.length given are
-// by AudioWorkletProcessor documentation can have posiblity to change to more than 128
-// so change to dynamic by using length . if found more than 128 currently  iam not able to
-// see more than 128 so to impove some performance i just add constant of 128
+
 
 /**
+ * AudioProcessor.js
+ * 
  * @author Akash V
  * @contact akashv2000.dev@gmail.com
- * @lastUpdated 03-04-2025
  * 
- * AudioProcessor written to give VOD  , time based , full recording audio by default
- * and architechtured in a way to make out maximum performance
+ * AudioProcessor module designed for:
+ * - light weight Voice Activity Detection (VAD)
+ * - Time-based audio chunking
+ * - Full-session audio recording
+ * - Audio Virtualization
+ *
+ * Built with performance and modularity in mind to enable high-efficiency audio processing workflows.
  */
-
-
 const AudioProcessor = `
+
 class AudioProcessor extends AudioWorkletProcessor {
 
     constructor() {
@@ -35,7 +37,7 @@ class AudioProcessor extends AudioWorkletProcessor {
         console.log("Hello :) from AudioProcessor V6");
         this._readyTolisten = false;
         this._userSettings;
-        this._needToSaveAudio = false;
+        this._needFullRecording = false;
         this._enableVad = false;
         this._eachProcessCallTime = 0.3333333333333333; //3ms by default , it can auto adjust based on sample rate and buffersize
 
@@ -115,7 +117,7 @@ class AudioProcessor extends AudioWorkletProcessor {
                 case this.signal.STOP:
                     this._readyTolisten = false;
 
-                    if (this._needToSaveAudio) {
+                    if (this._needFullRecording) {
                         const transferList = this._totalSession.map(chunk => chunk.buffer);
                         this.port.postMessage({
                             status: this.signal.ON_COMPLETE_FULL_RECORDING_TRIGGER,
@@ -144,7 +146,7 @@ class AudioProcessor extends AudioWorkletProcessor {
     _oneTimeOptions(params) {
         this._userSettings = params;
         this._enableVad = !!params?.vad?.enabled; //default False
-        this._needToSaveAudio = !!params?.recording?.enabled; //default False
+        this._needFullRecording = !!params?.recording?.enabled; //default False
     }
 
     _runtimeOptions(params) {
@@ -179,14 +181,14 @@ class AudioProcessor extends AudioWorkletProcessor {
      *  to reduce performance
      */
     _chooseProcess() {
-        if (this._enableVad && this._needToSaveAudio) {
+        if (this._enableVad && this._needFullRecording) {
             this._runtimeProcess = this.Process_With_Vad_And_FullRecording.bind(this);
         } else if (this._enableVad) {
             this._runtimeProcess = this.Process_With_Vad.bind(this);
-        } else if (this._enabledTimeIntervalVolumeVisualization) {
-            this._runtimeProcess = this.Process_TiME_BASED_With_Only_VolumeVisualization.bind(this);
+        } else if (this._needFullRecording) {
+            this._runtimeProcess = this.Process_TiME_BASED_With_FullRecording.bind(this);
         } else {
-            this._runtimeProcess = this.Process_TiME_BASED_Without_vad_and_FullRecording.bind(this);
+            this._runtimeProcess = this.Process_TiME_BASED_Without_FullRecording.bind(this);
         }
         // why this pattern ? it reduce braching improve performance way more
     }
@@ -214,11 +216,13 @@ class AudioProcessor extends AudioWorkletProcessor {
     }
 
 
-    Process_TiME_BASED_Without_vad_and_FullRecording(inputs, outputs, parameters) {
+    Process_TiME_BASED_Without_FullRecording(inputs, outputs, parameters) {
 
         const input = inputs[0];
 
         const channelData = input[0]; // taking first channel
+        this._enabledTimeIntervalVolumeVisualization && this.isSilent(channelData);
+
         if (this.currentTimeTriggerSecondsInFrame > this.maxTimeTriggerSecondsInFrame) {
             const transferList = this._buffer2dArray16Bit.map(chunk => chunk.buffer);
             this.port.postMessage({
@@ -241,13 +245,13 @@ class AudioProcessor extends AudioWorkletProcessor {
         return true;
     }
 
-    Process_TiME_BASED_With_Only_VolumeVisualization(inputs, outputs, parameters) {
+    Process_TiME_BASED_With_FullRecording(inputs, outputs, parameters) {
 
         const input = inputs[0];
 
         const channelData = input[0]; // taking first channel
 
-        this.isSilent(channelData);
+        this._enabledTimeIntervalVolumeVisualization && this.isSilent(channelData);
 
         if (this.currentTimeTriggerSecondsInFrame > this.maxTimeTriggerSecondsInFrame) {
             const transferList = this._buffer2dArray16Bit.map(chunk => chunk.buffer);
@@ -268,6 +272,8 @@ class AudioProcessor extends AudioWorkletProcessor {
         const converted16bit_array = this.float32ToInt16(channelData);
         this._buffer2dArray16Bit.push(converted16bit_array);
         this._buffer2dpreCaluculatingLength += converted16bit_array.length;
+        this._totalSession.push(new Int16Array(converted16bit_array));
+        this._totalSessionLength += converted16bit_array.length;
         return true;
     }
 
@@ -460,18 +466,30 @@ class AudioProcessor extends AudioWorkletProcessor {
      */
     isSilent(buffer) {
         const rms = this._getRMS(buffer);
+        const isSilent = rms < this._noiseFloor; //?is silent , lower than user noiceflor level?
 
         if (this._currentVolumeFrame > this._VolumeUpdateframe) {
+
+            if (isSilent) {
+                // Smoothly reduce previous RMS if silence is detected
+                if (this.previousRms > 0) {
+                    this.previousRms -= 0.0018; // Gradual decrease of volume during silence
+                }
+
+            } else {
+                // Update RMS value when audio is detected
+                this.previousRms = rms;
+            }
             this._currentVolumeFrame = 0;
             this.port.postMessage({
                 status: 15,
-                volume: rms,
+                volume: isSilent ? this.previousRms : rms,
             });
         } else {
             this._currentVolumeFrame++;
         }
 
-        return rms < this._noiseFloor;
+        return isSilent;
     }
 
 
