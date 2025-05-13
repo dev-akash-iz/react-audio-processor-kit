@@ -10,6 +10,7 @@ const signal = {
     VAD_SPEAKING_STOPED: 12,
     AUDIO_CHUNK_TIMER_TRIGGER: 11,
     ON_COMPLETE_FULL_RECORDING_TRIGGER: 13,
+    CLEAN: 20,
 }
 
 
@@ -35,6 +36,7 @@ class AudioProcessor extends AudioWorkletProcessor {
     constructor() {
         super();
         console.log("Hello :) from AudioProcessor V6");
+
         this._readyTolisten = false;
         this._userSettings;
         this._needFullRecording = false;
@@ -48,7 +50,8 @@ class AudioProcessor extends AudioWorkletProcessor {
          * This way we avoid if checks and get better performance.
          */
         this._runtimeProcess = () => true; // default dummy function
-        this._runtimeSwitcher = this._runtimeSwitcherHelper;
+        this._runtimeSwitcher = () => true;
+
         /**
          * variables for vad feature
          */
@@ -114,6 +117,11 @@ class AudioProcessor extends AudioWorkletProcessor {
                     this._readyTolisten = true;
                     break;
 
+                case this.signal.CLEAN:
+                    this._clean();
+                    console.log("called clean");
+                break;
+
                 case this.signal.STOP:
                     this._readyTolisten = false;
 
@@ -127,7 +135,6 @@ class AudioProcessor extends AudioWorkletProcessor {
                         this._totalSession = [];
                         this._totalSessionLength = 0;
                     }
-
                     break;
                 default:
                     console.log("not matching status key");
@@ -137,6 +144,7 @@ class AudioProcessor extends AudioWorkletProcessor {
 
     _initialAssign(params) {
         this.signal = params.signal;
+        this._runtimeSwitcher = this._runtimeSwitcherHelper.bind(this);
         this._oneTimeOptions(params);
         this._runtimeOptions(params);
         this._chooseProcess();
@@ -213,6 +221,31 @@ class AudioProcessor extends AudioWorkletProcessor {
             return this._runtimeProcess(inputs, outputs, parameters);
         }
         return true;
+    }
+
+    _clean(){
+        /**
+         * variables for vad feature
+         */
+        this._peakNoticedFrameCount = 0;
+        this._silenceNoticedFrameCount = 0;
+        this._facedAnyPeakVolume = false;
+
+        /**
+         * variables for Buffers
+         */
+        this._buffer2dArray16Bit = [];
+        this._buffer2dpreCaluculatingLength = 0;
+
+        /**
+         * variables for virtualization
+         */
+        this._currentVolumeFrame = 0;
+
+        /**
+         * variables for timebased feature
+         */
+        this.currentTimeTriggerSecondsInFrame = 0;
     }
 
 

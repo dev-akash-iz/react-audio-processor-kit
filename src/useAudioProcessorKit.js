@@ -156,6 +156,7 @@ function useAudioProcessorKit(settings = {}) {
             }
             stream?.getTracks().forEach((track) => track.stop());
             currentRef.STREAM && (currentRef.STREAM = undefined);
+            postMessage({ status: signal.CLEAN });
         } catch (error) {
             console.error("issue with cleanup");
         }
