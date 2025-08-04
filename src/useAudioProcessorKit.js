@@ -141,8 +141,8 @@ function useAudioProcessorKit(settings = {}) {
         micCode: signal.STOP
     });
 
-    const close = () => {
-        const currentRef = initialMainAudioResources.current;
+    const close = (RefrenceCurrentRef) => {
+        const currentRef = RefrenceCurrentRef || initialMainAudioResources.current;
         try {
             const source = currentRef?.SOURCE;
             //const workletThread = currentRef?.WORKLETHREAD;
@@ -163,8 +163,9 @@ function useAudioProcessorKit(settings = {}) {
     }
 
     useEffect(() => {
+        const currentRef = initialMainAudioResources.current;
         return () => {
-            close();
+            close(currentRef);
         }
     }, [])
 
@@ -351,9 +352,25 @@ export { useAudioProcessorKit };
 
 
 
-// direct convert int16bit to blob pcm / system that read need to be read with 2 byte to get proper data
-function encodePCM16ToBlob(int16ArrayChunks) {
-    return new Blob([int16ArrayChunks], { type: 'audio/pcm' });
+/**
+ * Encodes a mono Int16Array (16-bit signed little-endian) into a raw PCM Blob.
+ * Suitable for feeding into speech recognition or translation models like Whisper.
+ *
+ * @param {Int16Array} int16Array - The raw PCM samples (mono, 16-bit, LE).
+ * @returns {Blob} - A Blob containing raw PCM audio data.
+ */
+function encodePCM16ToBlob(int16ArrayChunks, totalSamples) {
+    const buffer = new ArrayBuffer(totalSamples * 2); // 2 bytes per sample
+    const view = new DataView(buffer);
+
+    let offset = 0;
+    for (const chunk of int16ArrayChunks) {
+        for (let i = 0; i < chunk.length; i++, offset += 2) {
+            view.setInt16(offset, chunk[i], true); // Little-endian
+        }
+    }
+
+    return new Blob([buffer], { type: 'application/octet-stream' }); // raw PCM blob
 }
 
 
